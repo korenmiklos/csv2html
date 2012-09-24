@@ -1,0 +1,16 @@
+---
+source: test.csv
+output: test1.html
+entry: A={{A}}, B={{B}}, C={{C}}
+document: |
+    {% for entry in entries %}
+    {{entry}}
+    {% endfor %}
+---
+source: test.csv
+output: test2.html
+entry: a={{A}}, b={{B}}, c={{C}}
+document: |
+    {% for entry in entries %}
+    {{entry}}
+    {% endfor %}
