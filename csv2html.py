@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 from jinja2 import Template
-from csv import DictReader
+import csv
 import yaml
 from urllib2 import urlopen, URLError
 
@@ -7,7 +8,35 @@ from urllib2 import urlopen, URLError
 Import data from CSV and create a dynamic HTML based on some templates
 '''
 
+def set_defaults(object, database, document_template, 
+			entry_template, output, filters={}, 
+			encoding='utf-8'):
+	pass
 
+# unicode-compativle versions of CSV readers
+# from http://stackoverflow.com/questions/1846135/python-csv-library-with-unicode-utf-8-support-that-just-works
+class UnicodeCsvReader(object):
+    def __init__(self, f, encoding="utf-8", **kwargs):
+        self.csv_reader = csv.reader(f, **kwargs)
+        self.encoding = encoding
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        # read and split the csv row into fields
+        row = self.csv_reader.next() 
+        # now decode
+        return [unicode(cell, self.encoding) for cell in row]
+
+    @property
+    def line_num(self):
+        return self.csv_reader.line_num
+
+class UnicodeDictReader(csv.DictReader):
+    def __init__(self, f, encoding="utf-8", fieldnames=None, **kwds):
+        csv.DictReader.__init__(self, f, fieldnames=fieldnames, **kwds)
+        self.reader = UnicodeCsvReader(f, encoding=encoding, **kwds)
 
 class Loader(object):
 	'''
@@ -33,14 +62,20 @@ class Loader(object):
 		document_template = Template(dct['document'])
 		entry_template = Template(dct['entry'])
 		output = open(dct['output'], 'w')
-		if 'filters' in dct:
+		try:
 			filters = dct['filters']
-		else:
+		except:
 			filters = {}
+
+		try:
+			encoding = dct['encoding']
+		except:
+			encoding = 'utf-8'
 
 		return dict( 
 			database=database, document_template=document_template, 
-			entry_template=entry_template, output=output, filters=filters)
+			entry_template=entry_template, output=output, filters=filters, 
+			encoding=encoding)
 
 
 
@@ -50,16 +85,25 @@ class Configuration(object):
 		self.document_template = dct['document_template']
 		self.entry_template = dct['entry_template']
 		self.output = dct['output']
-		if 'filters' in dct:
+		try:
+			self.encoding = dct['encoding']
+		except:
+			self.encoding = 'utf-8'
+		try:
 			self.filters = dct['filters']
-		else:
+		except:
 			self.filters = {}
 
 	def read_entries(self):
 		return [Entry(record, self.entry_template, self.filters) for record in self.database.read()]
 
 	def render_document(self):
-		return Document(self.read_entries(), self.document_template).render()
+		if self.encoding == 'html':
+			return Document(self.read_entries(), self.document_template).render().encode('ascii', 'xmlcharrefreplace')
+		elif self.encoding == 'utf-8':
+			return Document(self.read_entries(), self.document_template).render().encode('utf-8')
+		else:
+			return Document(self.read_entries(), self.document_template).render().encode('utf-8')
 
 	def write_document(self):
 		self.output.write(self.render_document())
@@ -70,7 +114,7 @@ class Database(object):
 	A connection to Google spreadsheet or other web based CSV file.
 	'''
 	def __init__(self, source):
-		self.reader = DictReader(source)
+		self.reader = UnicodeDictReader(source)
 
 	def read(self):
 		return self.reader
@@ -151,7 +195,7 @@ class Entry(object):
 		Render a dictionary of fields using a template.
 		'''
 		self.apply_all_filters()
-		return self.template.render(**self.fields)
+		return unicode(self.template.render(**self.fields))
 
 	def apply_all_filters(self):
 		f = Filter()
@@ -188,7 +232,7 @@ class Document(object):
 		'''
 		Render a list of entries using a template.
 		'''
-		return self.template.render(entries=self.entries)
+		return unicode(self.template.render(entries=self.entries))
 
 	def __unicode__(self):
 		return self.render()

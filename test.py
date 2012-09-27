@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import csv2html as module
 import unittest as ut 
 
@@ -19,6 +20,30 @@ class TestDatabase(ut.TestCase):
 
 		return tmpf
 
+	def test_accepts_utf8(self):
+		stream = StringIO()
+		stream.write(u'szőlőfeldolgozó,üzem\n1,2'.encode('utf-8'))
+		stream.seek(0)
+		db = module.Database(stream)
+		self.assertIsInstance(db, module.Database)
+
+	def test_returns_unicode_keys(self):
+		stream = StringIO()
+		stream.write(u'szőlőfeldolgozó,üzem\n1,2'.encode('utf-8'))
+		stream.seek(0)
+		db = module.Database(stream)
+		record = list(db.read())[0]
+		for key in record.keys():
+			self.assertIsInstance(key, unicode)
+
+	def test_returns_unicode_values(self):
+		stream = StringIO()
+		stream.write(u'A,B\nszőlőfeldolgozó,üzem'.encode('utf-8'))
+		stream.seek(0)
+		db = module.Database(stream)
+		record = list(db.read())[0]
+		for value in record.values():
+			self.assertIsInstance(value, unicode)
 
 	def test_dictreader_is_returned(self):
 		tmpf = self.create_test_file()
@@ -133,10 +158,18 @@ class TestEntry(ut.TestCase):
 			entry = module.Entry(dict(a='1, 2, 3', apply_all_filters=4), Template(''))
 		self.assertRaises(ValueError, callable)
 
+	def test_unicode_to_unicode(self):
+		entry = module.Entry(dict(text=u'szőlőfeldolgozó üzem'), Template('{{text}}'))
+		self.assertEqual(entry.render(), u'szőlőfeldolgozó üzem')
+
 class TestDocument(ut.TestCase):
 	def test_document_renders_something(self):
 		document = module.Document([], Template('Dummy template'))
 		self.assertEqual(str(document), 'Dummy template')
+
+	def test_document_renders_unicode(self):
+		document = module.Document([], Template(u'szőlőfeldolgozó üzem'))
+		self.assertEqual(document.render(), u'szőlőfeldolgozó üzem')
 
 	def test_document_renders_entries(self):
 		entry = module.Entry({}, Template('An entry.'))
@@ -219,6 +252,53 @@ class TestConfiguration(ut.TestCase):
 		output.seek(0)
 		self.assertEqual(output.read(), 'A document.')
 
+	def test_default_encoding_is_utf8(self):
+		stream = StringIO()
+		stream.write(u'A,B,C'.encode('utf-8'))
+		stream.write(u'ő,ú,á'.encode('utf-8'))
+		stream.write(u'é,ű,í'.encode('utf-8'))
+		stream.seek(0)
+		db = module.Database(stream)
+		dct = {'database': db, 'document_template': Template('{% for entry in entries %}{{entry}}{% endfor %}'), 
+		'entry_template': Template('{{A}}, {{B}}, {{C}}'), 'output': StringIO()}
+		conf = module.Configuration(dct)
+		document = conf.render_document()
+		try:
+			document.decode('utf-8')
+		except Exception:
+			self.fail('Could not decode string as UTF-8.')
+
+	def test_output_rendered_in_utf8(self):
+		stream = StringIO()
+		stream.write(u'A,B,C'.encode('utf-8'))
+		stream.write(u'ő,ú,á'.encode('utf-8'))
+		stream.write(u'é,ű,í'.encode('utf-8'))
+		stream.seek(0)
+		db = module.Database(stream)
+		dct = {'database': db, 'document_template': Template('{% for entry in entries %}{{entry}}{% endfor %}'), 
+		'entry_template': Template('{{A}}, {{B}}, {{C}}'), 'output': StringIO(), 'encoding': 'utf-8'}
+		conf = module.Configuration(dct)
+		document = conf.render_document()
+		try:
+			document.decode('utf-8')
+		except Exception:
+			self.fail('Could not decode string as UTF-8.')
+
+	def test_output_rendered_in_html(self):
+		stream = StringIO()
+		stream.write(u'A,B,C'.encode('utf-8'))
+		stream.write(u'ő,ú,á'.encode('utf-8'))
+		stream.write(u'é,ű,í'.encode('utf-8'))
+		stream.seek(0)
+		db = module.Database(stream)
+		dct = {'database': db, 'document_template': Template('{% for entry in entries %}{{entry}}{% endfor %}'), 
+		'entry_template': Template('{{A}}, {{B}}, {{C}}'), 'output': StringIO(), 'encoding': 'html'}
+		conf = module.Configuration(dct)
+		document = conf.render_document()
+		try:
+			document.decode('ascii')
+		except Exception:
+			self.fail('Could not decode string as ascii.')
 
 class TestResolver(ut.TestCase):
 	def test_known_example(self):
